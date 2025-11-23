@@ -245,8 +245,9 @@ with tab_dash:
         c3.metric("IMC médio (geral)", "N/A")
 
     st.markdown("### Distribuição de classes (Obesity)")
-    class_counts = df["Obesity"].value_counts().sort_index()
-    st.bar_chart(class_counts)
+    class_counts = df["Obesity"].value_counts().sort_index().reset_index()
+    class_counts.columns = ["Obesity", "Count"]
+    st.bar_chart(class_counts.set_index("Obesity"))
 
     # Perfil médio por classe
     st.markdown("### Perfil médio por nível de obesidade")
