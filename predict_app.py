@@ -28,10 +28,12 @@ def load_or_train_model(model_path: str, data_path: str):
     """
     Carrega o model.pkl. Se não existir, treina automaticamente usando o Obesity.csv.
     """
+    # 1) Se já existe model.pkl, só carrega
     if os.path.exists(model_path):
         model = joblib.load(model_path)
         return model, getattr(model, "classes_", None)
 
+    # 2) Se não tem model.pkl, tenta treinar a partir do CSV (fallback)
     if not os.path.exists(data_path):
         raise FileNotFoundError(
             f"Modelo não encontrado em '{model_path}' e dataset '{data_path}' inexistente."
@@ -39,6 +41,9 @@ def load_or_train_model(model_path: str, data_path: str):
 
     # Leitura do dataset
     df = pd.read_csv(data_path)
+    if "Obesity" not in df.columns:
+        raise ValueError("A coluna alvo 'Obesity' não foi encontrada no dataset.")
+
     y = df["Obesity"].astype(str)
     X = df.drop(columns=["Obesity"])
 
@@ -47,14 +52,21 @@ def load_or_train_model(model_path: str, data_path: str):
     num_cols = X.select_dtypes(include=["number"]).columns.tolist()
 
     # Pré-processamento
-    num_pipe = Pipeline([("imp", SimpleImputer(strategy="median")),
-                         ("scaler", StandardScaler())])
+    num_pipe = Pipeline([
+        ("imp", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler())
+    ])
 
-    cat_pipe = Pipeline([("imp", SimpleImputer(strategy="most_frequent")),
-                         ("ohe", OneHotEncoder(handle_unknown="ignore", sparse=False))])
+    # ⚠️ AQUI ESTÁ A CORREÇÃO IMPORTANTE: sparse_output=False
+    cat_pipe = Pipeline([
+        ("imp", SimpleImputer(strategy="most_frequent")),
+        ("ohe", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+    ])
 
-    pre = ColumnTransformer([("num", num_pipe, num_cols),
-                             ("cat", cat_pipe, cat_cols)])
+    pre = ColumnTransformer([
+        ("num", num_pipe, num_cols),
+        ("cat", cat_pipe, cat_cols)
+    ])
 
     # Modelo RandomForest ajustado para forte desempenho
     rf = RandomForestClassifier(
@@ -107,7 +119,9 @@ except Exception as e:
 # ---------------------------------------------------
 # INTERFACE — TABS
 # ---------------------------------------------------
-tab_pred, tab_lote, tab_info = st.tabs(["🔍 Predição Individual", "📦 Predição em Lote", "ℹ️ Sobre o Modelo"])
+tab_pred, tab_lote, tab_info = st.tabs(
+    ["🔍 Predição Individual", "📦 Predição em Lote", "ℹ️ Sobre o Modelo"]
+)
 
 with tab_pred:
     st.subheader("Preencha os dados do paciente:")
@@ -119,20 +133,20 @@ with tab_pred:
         age = st.number_input("Age", min_value=5, max_value=100, value=25)
         height = st.number_input("Height (m)", min_value=1.0, max_value=2.5, value=1.70, step=0.01)
         weight = st.number_input("Weight (kg)", min_value=30, max_value=250, value=70)
-        family_history = st.selectbox("Family History", ["yes", "no"])
-        favc = st.selectbox("FAVC (Alimentos calóricos?)", ["yes", "no"])
+        family_history = st.selectbox("family_history (Histórico familiar de obesidade?)", ["yes", "no"])
+        favc = st.selectbox("FAVC (Alimentos muito calóricos?)", ["yes", "no"])
         fcvc = st.slider("FCVC (vegetais 1–3)", 1.0, 3.0, 2.0)
-        ncp = st.slider("NCP (refeições por dia)", 1, 4, 3)
+        ncp = st.slider("NCP (refeições principais/dia)", 1, 4, 3)
 
     with col2:
         caec = st.selectbox("CAEC (come entre refeições?)", ["no", "Sometimes", "Frequently", "Always"])
-        smoke = st.selectbox("SMOKE", ["yes", "no"])
-        ch2o = st.slider("CH2O (litros/dia)", 1.0, 3.0, 2.0)
+        smoke = st.selectbox("SMOKE (fuma?)", ["yes", "no"])
+        ch2o = st.slider("CH2O (litros de água/dia)", 1.0, 3.0, 2.0)
         scc = st.selectbox("SCC (controla calorias?)", ["yes", "no"])
         faf = st.slider("FAF (atividade física 0–3)", 0.0, 3.0, 1.0)
         tue = st.slider("TUE (tempo em telas 0–2)", 0.0, 2.0, 1.0)
-        calc = st.selectbox("CALC (álcool)", ["no", "Sometimes", "Frequently", "Always"])
-        mtrans = st.selectbox("MTRANS", ["Walking", "Bike", "Motorbike", "Public_Transportation", "Automobile"])
+        calc = st.selectbox("CALC (consumo de álcool)", ["no", "Sometimes", "Frequently", "Always"])
+        mtrans = st.selectbox("MTRANS (transporte)", ["Walking", "Bike", "Motorbike", "Public_Transportation", "Automobile"])
 
     if st.button("🔍 Prever"):
         form = {
@@ -156,7 +170,7 @@ with tab_pred:
 
         pred, table = predict_input(model, form)
 
-        st.success(f"### Resultado: **{pred}**")
+        st.success(f"### Resultado previsto: **{pred}**")
         st.write("### Probabilidades por classe:")
         st.dataframe(table.reset_index(drop=True), use_container_width=True)
 
@@ -197,3 +211,5 @@ with tab_info:
     """)
 
     st.code(f"MODEL_PATH = {DEFAULT_MODEL_PATH}\nDATA_PATH = {DEFAULT_DATA_PATH}", language="bash")
+
+
